@@ -1,63 +1,41 @@
-//
-//  QuizListViewController.swift
-//  iQuiz
-//
-//  Created by Jia Wu on 5/5/25.
-//
-
 import UIKit
-
+import Network
 
 class QuizListViewController: UIViewController, UITableViewDataSource, UITableViewDelegate {
-    
+
     @IBOutlet weak var tableView: UITableView!
 
-    // MARK: - Quiz Data
-    let quizzes: [Quiz] = [
-        Quiz(
-            title: "Mathematics",
-            description: "Test your math skills!",
-            iconName: "math_icon",
-            questions: [
-                QuizQuestion(question: "What is 8 + 5?", choices: ["12", "13", "14", "15"], correctIndex: 1),
-                QuizQuestion(question: "What’s the square root of 64?", choices: ["6", "8", "10", "12"], correctIndex: 1),
-                QuizQuestion(question: "Which is a prime number?", choices: ["4", "9", "13", "15"], correctIndex: 2)
-            ]
-        ),
-        Quiz(
-            title: "Marvel Super Heroes",
-            description: "How well do you know them?",
-            iconName: "marvel_icon",
-            questions: [
-                QuizQuestion(question: "Who is Iron Man?", choices: ["Steve Rogers", "Tony Stark", "Bruce Banner", "Peter Parker"], correctIndex: 1),
-                QuizQuestion(question: "Who can lift Thor’s hammer?", choices: ["Loki", "Hulk", "Captain America", "Iron Man"], correctIndex: 2),
-                QuizQuestion(question: "What is Spider-Man’s real name?", choices: ["Peter Parker", "Clark Kent", "Barry Allen", "Bruce Wayne"], correctIndex: 0)
-            ]
-        ),
-        Quiz(
-            title: "Science",
-            description: "Explore science trivia!",
-            iconName: "science_icon",
-            questions: [
-                QuizQuestion(question: "What planet is known as the Red Planet?", choices: ["Earth", "Venus", "Mars", "Jupiter"], correctIndex: 2),
-                QuizQuestion(question: "What gas do plants absorb?", choices: ["Oxygen", "Carbon Dioxide", "Nitrogen", "Hydrogen"], correctIndex: 1),
-                QuizQuestion(question: "What is H2O?", choices: ["Oxygen", "Water", "Salt", "Hydrogen"], correctIndex: 1)
-            ]
-        )
-    ]
+    var quizzes: [Quiz] = []
+    var refreshTimer: Timer?
+    let refreshControl = UIRefreshControl()
 
-    // MARK: - Lifecycle
     override func viewDidLoad() {
         super.viewDidLoad()
         tableView.dataSource = self
         tableView.delegate = self
+
         self.title = "iQuiz"
+
+        // Settings button
         self.navigationItem.rightBarButtonItem = UIBarButtonItem(
             title: "Settings",
             style: .plain,
             target: self,
             action: #selector(settingsTapped)
         )
+
+        // Pull to refresh
+        tableView.refreshControl = refreshControl
+        refreshControl.addTarget(self, action: #selector(refreshQuizzes), for: .valueChanged)
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        if let sharedQuizzes = QuizManager.shared.quizzes {
+            self.quizzes = sharedQuizzes
+            self.tableView.reloadData()
+        }
+        startRefreshTimer()
     }
 
     // MARK: - TableView
@@ -70,7 +48,6 @@ class QuizListViewController: UIViewController, UITableViewDataSource, UITableVi
         let quiz = quizzes[indexPath.row]
         cell.titleLabel.text = quiz.title
         cell.descriptionLabel.text = quiz.description
-        cell.iconImageView.image = UIImage(named: quiz.iconName)
         return cell
     }
 
@@ -79,9 +56,59 @@ class QuizListViewController: UIViewController, UITableViewDataSource, UITableVi
         performSegue(withIdentifier: "toQuestion", sender: selectedQuiz)
     }
 
+    // MARK: - Pull to Refresh
+    @objc func refreshQuizzes() {
+        let url = UserDefaults.standard.string(forKey: "quizURL") ?? "http://tednewardsandbox.site44.com/questions.json"
+        isNetworkAvailable { isAvailable in
+            if !isAvailable {
+                self.showAlert("❌ No internet. Pull failed.")
+                self.refreshControl.endRefreshing()
+                return
+            }
+            QuizFetcher.fetchQuizzes(from: url) { quizzes in
+                DispatchQueue.main.async {
+                    if let quizzes = quizzes {
+                        QuizManager.shared.quizzes = quizzes
+                        self.quizzes = quizzes
+                        self.tableView.reloadData()
+                    } else {
+                        self.showAlert("⚠️ Failed to fetch quiz data.")
+                    }
+                    self.refreshControl.endRefreshing()
+                }
+            }
+        }
+    }
+
     // MARK: - Settings
     @objc func settingsTapped() {
-        let alert = UIAlertController(title: nil, message: "Settings go here", preferredStyle: .alert)
+        performSegue(withIdentifier: "toSettings", sender: self)
+    }
+
+    // MARK: - Timer
+    func startRefreshTimer() {
+        refreshTimer?.invalidate()
+        let interval = UserDefaults.standard.integer(forKey: "refreshInterval")
+        guard interval > 0 else { return }
+
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(interval), repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            let url = UserDefaults.standard.string(forKey: "quizURL") ?? "http://tednewardsandbox.site44.com/questions.json"
+            QuizFetcher.fetchQuizzes(from: url) { quizzes in
+                if let quizzes = quizzes {
+                    DispatchQueue.main.async {
+                        QuizManager.shared.quizzes = quizzes
+                        self.quizzes = quizzes
+                        self.tableView.reloadData()
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Alert Helper
+    func showAlert(_ message: String) {
+        let alert = UIAlertController(title: "Notice", message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default))
         present(alert, animated: true)
     }
@@ -96,4 +123,17 @@ class QuizListViewController: UIViewController, UITableViewDataSource, UITableVi
             questionVC.score = 0
         }
     }
+}
+
+// MARK: - Network Check
+func isNetworkAvailable(completion: @escaping (Bool) -> Void) {
+    let monitor = NWPathMonitor()
+    monitor.pathUpdateHandler = { path in
+        monitor.cancel()
+        DispatchQueue.main.async {
+            completion(path.status == .satisfied)
+        }
+    }
+    let queue = DispatchQueue(label: "NetworkMonitor")
+    monitor.start(queue: queue)
 }
