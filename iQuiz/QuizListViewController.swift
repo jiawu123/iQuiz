@@ -61,7 +61,7 @@ class QuizListViewController: UIViewController, UITableViewDataSource, UITableVi
         let url = UserDefaults.standard.string(forKey: "quizURL") ?? "http://tednewardsandbox.site44.com/questions.json"
         isNetworkAvailable { isAvailable in
             if !isAvailable {
-                self.showAlert("❌ No internet. Pull failed.")
+                self.showAlert("No internet. Pull failed.")
                 self.refreshControl.endRefreshing()
                 return
             }
@@ -72,7 +72,7 @@ class QuizListViewController: UIViewController, UITableViewDataSource, UITableVi
                         self.quizzes = quizzes
                         self.tableView.reloadData()
                     } else {
-                        self.showAlert("⚠️ Failed to fetch quiz data.")
+                        self.showAlert("Failed to fetch quiz data.")
                     }
                     self.refreshControl.endRefreshing()
                 }

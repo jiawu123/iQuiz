@@ -6,7 +6,7 @@
 //
 
 import Foundation
-struct QuizQuestion: Decodable {
+struct QuizQuestion: Codable {
     let question: String
     let choices: [String]
     let correctIndex: Int
@@ -32,7 +32,7 @@ struct QuizQuestion: Decodable {
 }
 
 
-struct Quiz: Decodable {
+struct Quiz: Codable {
     let title: String
     let description: String
     let questions: [QuizQuestion]
