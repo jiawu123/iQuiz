@@ -82,7 +82,9 @@ class QuizListViewController: UIViewController, UITableViewDataSource, UITableVi
 
     // MARK: - Settings
     @objc func settingsTapped() {
-        performSegue(withIdentifier: "toSettings", sender: self)
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
+        }
     }
 
     // MARK: - Timer
